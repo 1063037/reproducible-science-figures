@@ -1,0 +1,327 @@
+---
+title: "Reproducible Science & Figures Assignment"
+output:
+  html_document: default
+  pdf_document: default
+date: "2023-12-04"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## QUESTION 01: Data Visualisation for Science Communication
+
+*Create a figure using the Palmer Penguin dataset that is correct but badly communicates the data. **Do not make a boxplot**.*
+
+*Use the following references to guide you:*
+
+-   [*https://www.nature.com/articles/533452a*](https://www.nature.com/articles/533452a){.uri}
+-   [*https://elifesciences.org/articles/16800*](https://elifesciences.org/articles/16800){.uri}
+
+*Note: Focus on visual elements rather than writing misleading text on it.*
+
+### a) Provide your figure here:
+
+Setup code to install + library the necessary packages and check that the penguins dataset has properly loaded in
+```{r bad figure code, echo=FALSE}
+#Install palmer penguins dataset
+install.packages("palmerpenguins")
+#Install ggplot2 to produce the figure with
+install.packages("ggplot2")
+#Load the packages into the library
+library(palmerpenguins)
+library(ggplot2)
+#Check that we have properly loaded in the penguin data
+summary(penguins)
+```
+Code chunk for creating the plot
+```{r echo=FALSE}
+#Use ggplot to produce a graph with body mass on the x-axis, flipper length on the y-axis, and a single (red) straight line to show a linear relationship between the two variables
+ggplot(data = penguins, aes(x = body_mass_g, y = flipper_length_mm)) +
+  geom_smooth(method = lm, se = FALSE, colour = "red") +
+  xlim(0, 9000) +
+  ylim(160,235) +
+  theme(panel.background = element_rect(fill = 'green', color = 'red'),
+          panel.grid.major = element_line(color = 'red', size = 2),
+          panel.grid.minor = element_line(color = 'red', size = 2),
+        text=element_text(size=3))
+```
+
+### b) Write about how your design choices mislead the reader about the underlying data (200-300 words).
+
+Firstly, the figure does not show all of the original data points. This prevents the reader seeing the true variation in the data and thus inhibits their understanding of how strong the displayed relationship between body mass and flipper length is. This also prevents potentially important sub-groups within the data (such as different penguin species) being viewed in comparison to each other, thus making the relationship appear more generally applicable across penguins than it actually is. The line used has no confidence interval displayed, further obscuring the strength of the relationship.
+
+The scale does not show the entire y-axis (starting at 160 mm rather than 0) – making the relationship appear steeper and thus exaggerating the importance of the relationship in explaining variation in flipper length. The scale shows too much of the x-axis (with values outside of the original data shown) – which also makes the relationship appear steeper, as well as implying that it could be extrapolated from for values outside the original range.
+
+The font size used for the figure text is small and difficult to read. This could lead to readers misunderstanding what variables are displayed. No title is provided, which may exacerbate this issue. The line displaying the relationship between variables is red – the same colour as the grid-lines in the figure background.  This makes it hard to distinguish them and thus harder to view the relationship displayed. The figure background uses green, which may create difficulty for readers with colour blindness (or other similar visual impairments) in distinguishing between the line from the background. The gridlines are very thick, and the background colours overly bright (for those without visual impairments) which make the figure difficult to view, thus reducing the time readers spend scrutinising it – making them less likely to notice other misleading elements.
+
+References:
+Whitlock, Michael, and Dolph Schluter. The Analysis of Biological Data. Third edition. New York: Macmillan International Higher Education, 2020.
+
+------------------------------------------------------------------------
+
+## QUESTION 2: Data Pipeline
+
+*Write a data analysis pipeline in your .rmd RMarkdown file. You should be aiming to write a clear explanation of the steps as well as clear code.*
+
+*Your code should include the steps practiced in the lab session:*
+
+### Introduction
+The Palmer Penguins dataset provides data collected from over 300 penguins, with each individual measured for several traits - including its body mass, flipper length, and species. For this analysis pipeline, we are interested in whether body mass is a significant predictor of flipper length, whether there is a significant difference in flipper lengths between species, and whether there is a significant interaction between the effects of body mass and species on flipper length.
+
+#### Set up packages
+We first need to make sure we have installed and loaded the packages we will need for handling, analysing, and visualising the data. The code below does this.
+```{r}
+#Install palmer penguins dataset
+install.packages("palmerpenguins")
+#Install ggplot2 to produce the figure with
+install.packages("ggplot2")
+#Install janitor to help with cleaning the data
+install.packages("janitor")
+#Install dplyr to help pipe functions together
+install.packages("dplyr")
+#Install ragg to help save figures
+install.packages("ragg")
+
+#Load the packages into the library
+library(palmerpenguins)
+library(ggplot2)
+library(janitor)
+library(dplyr)
+library(ragg)
+```
+
+
+#### Load in the data
+The following code will look at the raw dataset from the palmerpenguins package and save a copy within our project folder for us to work on.
+```{r}
+#Check that we have properly loaded in the penguin data
+head(penguins_raw)
+#Give ourselves an overview of the raw data
+summary(penguins_raw)
+#Save a version of the raw data to work on in a folder within the project
+write.csv(penguins_raw, "data/penguins_raw.csv")
+```
+
+
+#### Clean the data
+First, this code chunk creates several functions to use for cleaning. We can easily re-use these functions later on if we need to do more cleaning in future. Using the same functions also aids reproducibility by ensuring that future cleaning will be done in the exact same way.
+```{r}
+#This function makes the data's column names machine-readable
+clean_column_names <- function(raw_penguins) {
+    raw_penguins %>%
+        clean_names()
+}
+
+#This function is to shorten the species names
+shorten_species <- function(raw_penguins) {
+    raw_penguins %>%
+        mutate(species = case_when(
+            species == "Adelie Penguin (Pygoscelis adeliae)" ~ "Adelie",
+            species == "Chinstrap penguin (Pygoscelis antarctica)" ~ "Chinstrap",
+            species == "Gentoo penguin (Pygoscelis papua)" ~ "Gentoo"
+        ))
+}
+
+#This function removes any empty columns or rows
+remove_empty_columns_rows <- function(raw_penguins) {
+    raw_penguins %>%
+        remove_empty(c("rows", "cols"))
+}
+
+# A function to remove rows which contain NA values
+remove_NA <- function(penguins_data) {
+    penguins_data %>%
+        na.omit()
+}
+
+#This function subsets the data based on the list of column names
+subset_columns <- function(raw_penguins, column_names) {
+    raw_penguins %>%
+        select(all_of(column_names))
+}
+
+#This function subsets the penguins data set based on species
+filter_by_species <- function(raw_penguins, selected_species) {
+    raw_penguins %>%
+        filter(species == selected_species)
+}
+
+#This function subsets the penguins data set based on island
+filter_by_island <- function(raw_penguins, selected_island) {
+  raw_penguins %>%
+    filter(island == selected_island)
+}
+
+```
+
+
+Now we will use several of these functions together to clean the data.
+```{r}
+#Pipe together all the functions we need to create a clean dataframe
+penguins_clean <- penguins_raw %>%
+  clean_column_names() %>%
+  shorten_species() %>%
+  remove_empty_columns_rows()
+#Save the clean dataframe
+write.csv(penguins_clean, "data/penguins_clean.csv")
+#View our clean dataframe to check that the functions have cleaned it properly
+head(penguins_clean)
+```
+
+
+#### Creating an exploratory figure
+To visually check whether there appear to be any trends in the relationship between body mass, species, and flipper length, we will make a simple exploratory scatterplot to show the distribution of the data. This code creates a function to produce a scatterplot of body mass against flipper length  with different species shown , and then calls it to produce the figure. Using a function to produce the figure means that if we wanted to produce more later on, there would be consistency between figures - which enhances reproducibility and makes it harder to adjust figures to present data in a misleading way.
+```{r}
+#This function will produce a scatterplot with body mass on the x-axis, flipper length on the y-axis, points coloured by species, and human-readable labels 
+exploreplot_mass_flipper_species <- function(clean_penguins) {
+    ggplot(clean_penguins, aes(x = body_mass_g, y = flipper_length_mm, colour = species)) +
+    geom_point() +
+    theme_bw() +
+    labs(x = "Body mass / g", y = "Flipper length / mm")
+}
+#Call the function to produce the plot
+exploreplot_mass_flipper_species(penguins_clean)
+```
+
+
+#### Save the figure
+So that we can use this figure effectively outside of this document with appropriate resolution, size, and scaling, we will save a .png of it in a folder for figures found within this project folder.
+```{r}
+#Make the plot an object
+exploratory_mass_flipper_species <- exploreplot_mass_flipper_species(penguins_clean)
+#Save a png of the figure with appropriate size, resolution, and scaling into the figures folder
+agg_png("figures/exploratory_figure_bodymass_flipperlength_species.png", 
+        width = 1000, height = 500, units = "px",res=300, scaling = 0.4)
+exploratory_mass_flipper_species
+dev.off()
+```
+
+
+### Hypotheses
+We can see from the exploratory figure that there seems to be an association between body mass and flipper length, and that this seems to be affected by species. To test whether body mass is a significant predictor of flipper length, whether there is a significant difference in flipper lengths between species, and whether there is a significant interaction between the effects of body mass and species on flipper length, we will use an analysis of covariance (ANCOVA) test.
+
+Our null hypotheses are:
+- The mean flipper lengths of each species are not significantly different from each other.
+- The slope of body mass against flipper length is not significantly different from 0.
+- The effect of body mass on flipper length does not depend on species (and the effect of species does not depend on body mass), the slopes of each species are not significantly different from each other.
+
+Our alternative hypotheses are:
+- The mean flipper length of at least one species differs from another species' mean.
+- The slope of body mass against flipper length is significantly different from 0.
+- The effect of body mass on flipper length depends on species (and the effect of species depends on body mass), the slopes of each species are significantly different from each other.
+
+### Run the ANCOVA test
+As ANCOVA tests are a type of general linear model, we first need to create a linear model with body mass and species as explanatory variables with interactive effects, and flipper length as a response variable. The code below does this.
+```{r}
+#Create the interaction model as specified above using the cleaned data
+mass_species_flipper_mod <- lm(flipper_length_mm ~ body_mass_g*species, penguins_clean)
+```
+
+
+#### Check assumptions
+Before running our statistical test we must check that the data meets the assumptions the test makes. An ANCOVA test assumes:
+- Random sampling at all possible combinations of values of explanatory variables
+- Normally distributed data at all possible combinations of values of explanatory variables
+- Equal variance across all possible combinations of values of explanatory variables
+
+We can check for normality and equal variance using a qqplot and a residuals vs fitted plot, respectively.
+Code for a qqplot:
+```{r}
+#Produce the plot using the model created earlier
+plot(mass_species_flipper_mod, which = 2)
+```
+
+The points are very close to the line, indicating that the assumption of normality is met.
+
+Code for a residuals vs fitted plot:
+```{r}
+#Produce the plot using the model created earlier
+plot(mass_species_flipper_mod, which = 1)
+```
+
+The line is very close to straight, with similar amounts of points above and below it, indicating the assumption of equal variance is met. We therefore can safely use an ANCOVA test to test our hypotheses.
+
+
+### Results and discussion
+The following code perfoms an ANCOVA test on our model.
+```{r}
+#Summarise the model
+summary(mass_species_flipper_mod)
+#Run the ANCOVA test on the model
+anova(mass_species_flipper_mod)
+```
+We can see from the R-squared value in the summary section that the model explains 85.53% of the variation observed in flipper length.
+
+The p-values for the F-ratio values can be seen in the "Analysis of Variance Table" section.
+The p-values are significant to the highest level for both body mass and species individually. The interaction effect of both variables is also significant at the 95% level (p value = 0.0195).
+
+Consequently, we can reject the null hypothesis that the effect of body mass on flipper length does not depend on species (and the effect of species does not depend on body mass), as the slope of at least one species is different to another.
+
+
+#### Results Figure
+To visualise this significant interaction effect, we will plot a figure of body mass against flipper length showing the different slopes of each species with 95% confidence intervals as given by the model. As before, the code to produce the model is given in a function to aid reproducibility.
+```{r}
+#This function will produce a scatterplot with body mass on the x-axis, flipper length on the y-axis, points coloured by species and slightly transparent, separate linear slopes (with confidence intervals shown) for each species, and human-readable labels.
+plot_mass_flipper_species <- function(clean_penguins) {
+    ggplot(clean_penguins, aes(x = body_mass_g, y = flipper_length_mm, colour = species)) +
+    geom_point(alpha = 0.25) +
+    geom_smooth(method = "lm") +
+    theme_bw() +
+    labs(x = "Body mass / g", y = "Flipper length / mm")
+}
+#Call the function to produce the plot
+plot_mass_flipper_species(penguins_clean)
+```
+
+
+#### Save the figure
+Similarly to before, this code will save a .png of the results figure for use outside of this document into the "figures" folder"
+```{r}
+#Make the plot an object
+mass_species_flipper_resultsfig <- plot_mass_flipper_species(penguins_clean)
+#Save a png of the figure with appropriate size, resolution, and scaling into the figures folder
+agg_png("figures/results_figure_bodymass_flipperlength_species.png", 
+        width = 1200, height = 500, units = "px",res=500, scaling = 0.3)
+mass_species_flipper_resultsfig
+dev.off()
+```
+
+
+### Conclusion
+The ANCOVA test showed that there is a significant interactive effect of body mass and species on their flipper length. This suggests that the scaling of flipper length with mass is different between species, and thus that penguin flipper physiology depends on more than just penguin size, and that the physiologies of different penguins respond differently to changes in size. The interaction model used for the test explained 85.53% of variation in flipper length. This is very high, indicating that body mass and species are very important drivers of flipper length in the penguins observed.
+
+------------------------------------------------------------------------
+
+## QUESTION 3: Open Science
+
+### a) GitHub
+
+*Upload your RProject you created for **Question 2** and any files and subfolders used to GitHub. Do not include any identifiers such as your name. Make sure your GitHub repo is public.*
+
+*GitHub link:*
+
+*You will be marked on your repo organisation and readability.*
+
+### b) Share your repo with a partner, download, and try to run their data pipeline.
+
+*Partner's GitHub link:*
+
+*You **must** provide this so I can verify there is no plagiarism between you and your partner.*
+
+### c) Reflect on your experience running their code. (300-500 words)
+
+-   *What elements of your partner's code helped you to understand their data pipeline?*
+
+-   *Did it run? Did you need to fix anything?*
+
+-   *What suggestions would you make for improving their code to make it more understandable or reproducible, and why?*
+
+-   *If you needed to alter your partner's figure using their code, do you think that would be easy or difficult, and why?*
+
+### d) Reflect on your own code based on your experience with your partner's code and their review of yours. (300-500 words)
+
+-   *What improvements did they suggest, and do you agree?*
+
+-   *What did you learn about writing code for other people?*
